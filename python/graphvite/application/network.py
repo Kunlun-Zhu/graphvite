@@ -58,6 +58,13 @@ class LinkPredictor(nn.Module):
             embedding = torch.as_tensor(embedding)
             embedding = nn.Embedding.from_pretrained(embedding, freeze=True)
             self.embeddings.append(embedding)
+        ###todo
+        ###dim_e, dim_r
+        self.dim = 128
+        self.dim_e = 128
+        self.dim_r = 128
+        self.rel_tot = 15000
+        self._trans = nn.Embedding(self.rel_tot, self.dim * self.dim)
 
     def forward(self, *indexes):
         assert len(indexes) == len(self.embeddings)
@@ -76,6 +83,26 @@ class LinkPredictor(nn.Module):
 
     @staticmethod
     def TransE(heads, relations, tails, margin=12):
+        x = heads + relations - tails
+        score = margin - x.norm(p=1, dim=1)
+        return score
+
+
+    def _transfer(self, e, r_transfer):
+        r_transfer = r_transfer.view(-1, self.dim_e, self.dim_r)
+        if e.shape[0] != r_transfer.shape[0]:
+            e = e.view(-1, r_transfer.shape[0], self.dim_e).permute(1, 0, 2)
+            e = torch.matmul(e, r_transfer).permute(1, 0, 2)
+        else:
+            e = e.view(-1, 1, self.dim_e)
+            e = torch.matmul(e, r_transfer)
+        return e.view(-1, self.dim_r)
+
+    @staticmethod
+    def TransR(heads, relations, tails, margin=12):
+        r_transfer = self._trans(relations)
+        heads = self._transfer(heads, r_transfer)
+        tails = self._transfer(tails, r_transfer)
         x = heads + relations - tails
         score = margin - x.norm(p=1, dim=1)
         return score
